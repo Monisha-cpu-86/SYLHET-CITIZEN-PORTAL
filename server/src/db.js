@@ -269,6 +269,10 @@ export async function initializeDatabase() {
   await ensureIndex('complaints', 'complaints_user_idempotency_unique', 'user_id, idempotency_key', true);
 
   const demoIds = new Map();
+  if (IS_DEVELOPMENT || process.env.ADMIN_PASSWORD) {
+    await seedAccount({ email: ADMIN_EMAIL, name: 'SCC Super Admin', password: ADMIN_PASSWORD, role: 'super_admin' });
+  }
+
   if (IS_DEVELOPMENT) {
     for (const demoUser of demoUsers) {
       const userId = await seedAccount({ ...demoUser, role: 'citizen' });
@@ -287,7 +291,6 @@ export async function initializeDatabase() {
       }
     }
 
-    await seedAccount({ email: ADMIN_EMAIL, name: 'SCC Super Admin', password: ADMIN_PASSWORD, role: 'super_admin' });
     const officerId = await seedAccount({
       email: OFFICER_EMAIL,
       name: 'SCC Field Officer',
@@ -328,7 +331,7 @@ export async function initializeDatabase() {
     await seedHistoryIfMissing(complaint.id, complaint.user_id, complaint.status, complaint.created_at);
   }
 
-  console.log('MariaDB schema is ready; SCC demo accounts and reports are seeded.');
+  console.log('MariaDB schema is ready.');
 }
 
 export default db;

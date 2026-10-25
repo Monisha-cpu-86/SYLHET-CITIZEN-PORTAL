@@ -461,7 +461,7 @@ export default function App() {
                 {authMode === "login" ? "Create an account" : "Sign in"}
               </button>
             </p>}
-            {authMode === "login" && !isStaffLogin && (
+            {authMode === "login" && !isStaffLogin && import.meta.env.DEV && (
               <div className="demo-accounts">
                 <p className="demo-heading">Explore with a demo account</p>
                 {demoAccounts.map((account) => (

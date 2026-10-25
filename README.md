@@ -56,7 +56,7 @@ Use the demo account buttons on the sign-in screen to fill in credentials.
 | Ayesha Rahman | `ayesha@example.com` | `ayesha123` |
 | Tanvir Hasan | `tanvir@example.com` | `tanvir123` |
 
-The API seeds demo data idempotently on first startup. Existing accounts and reports are not deleted or overwritten.
+The API seeds demo data idempotently on first startup in development. Demo accounts are hidden in production. Existing accounts and reports are not deleted or overwritten.
 
 ## Sylhet reporting and administration
 
@@ -75,22 +75,16 @@ On first startup in development, the API creates these staff accounts if they do
 
 These are local demo credentials only. Override them in `server/.env` before the first run; do not expose them to the internet. Account passwords are never reset by the idempotent seed. In production, set strong `ADMIN_PASSWORD` and `OFFICER_PASSWORD` values for initial provisioning, set a strong random `SESSION_SECRET`, use HTTPS, and configure `CLIENT_ORIGIN` to the exact trusted origin. Development staff seeding is disabled in production.
 
-## Deploy to Vercel
+## Deploy to Vercel and Render
 
-Import this repository into Vercel with the project root set to the repository root. `vercel.json` installs the client and server dependencies, builds the Vite client, serves the SPA, and routes `/api/*` to the Express function. GitHub pushes to the configured production branch will trigger deployments.
+Use **Vercel for the React/Vite frontend** and **Render for the Express API and MySQL database**. Vercel does not host the app's MySQL server; Render provides managed PostgreSQL, not managed MySQL. This repository therefore includes a Render Blueprint that runs MySQL 8.4 as a private Docker service with a persistent disk, plus the Node API with a persistent photo-upload disk. These are paid Render resources (`starter` services and persistent storage); review Render's current pricing before creating them. Do not use an ephemeral/free service for the database.
 
-Before the first deployment, configure these Vercel environment variables for Production (and Preview if you use preview deployments):
+1. In Render, choose **New → Blueprint**, connect this repository, and let Render read `render.yaml`. The Blueprint creates `civicpulse-mysql` and `civicpulse-sylhet-api` in Singapore.
+2. Provide secure values when prompted for `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `CLIENT_ORIGIN`. Use a new, long random value for each database/admin password. `CLIENT_ORIGIN` must be the exact HTTPS production origin shown in your Vercel project settings (no trailing slash). Render generates `SESSION_SECRET`. Keep these values in Render's environment settings, never in source control.
+3. Wait for MySQL and the API to become healthy. The API retries database initialization while MySQL starts. The configured production admin account is created idempotently; its password is not changed by later starts if the account already exists.
+4. In Vercel, keep the project root at the repository root and redeploy from `main`. `vercel.json` builds the client and proxies `/api/*` to `https://civicpulse-sylhet-api.onrender.com`. If Render assigns a different public service URL, update this rewrite to that URL and push the change.
 
-| Variable | Description |
-|----------|-------------|
-| `NODE_ENV` | Set to `production`. |
-| `SESSION_SECRET` | A long, random secret unique to this deployment. |
-| `CLIENT_ORIGIN` | The exact HTTPS origin used by the app, such as `https://your-project.vercel.app` or your custom domain. |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Connection details for a managed MySQL/MariaDB database reachable from Vercel. Use a restricted production database user and a provider with TLS support. |
-
-The database must be provisioned separately; Vercel does not run MySQL. The function applies the app's additive schema migration on startup. Production does not seed the local demo citizens or development staff accounts. Provision your production staff accounts through a secure, private process before relying on the admin console.
-
-**Production storage limitation:** report photos currently use the server's local filesystem (`UPLOAD_DIR`). Vercel function filesystems are ephemeral and not suitable for durable uploads. Configure a persistent object-storage integration before enabling photo uploads in production; this project does not currently include one. The live inbox also uses server-sent events, which are not a durable real-time transport on serverless functions.
+The Render API and MySQL must be in the same region so the API can connect to MySQL using the private hostname `civicpulse-mysql:3306`. MySQL is not exposed to the public internet. The API Blueprint attaches persistent disks for MySQL data and report photos. Back up MySQL with database-native exports; do not rely on disk snapshots as the only database backup. Production does not seed the local citizen demo users or sample reports.
 
 ## Storage and security notes
 
