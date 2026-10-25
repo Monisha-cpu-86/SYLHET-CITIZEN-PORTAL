@@ -12,7 +12,7 @@ const demoAccounts = [
 const demoAdminAccount = import.meta.env.DEV
   ? { name: "SCC Super Admin", email: "admin@scc.local", password: "SCCadmin2026!" }
   : { name: "SCC Dashboard (read-only)", email: "scc-dashboard-demo@scc.local", password: "SylhetReadOnly2026!" };
-const demoLoginsEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGINS === "true";
+const demoLoginsEnabled = true;
 
 async function request(path, options = {}) {
   let response;
@@ -495,7 +495,7 @@ export default function App() {
             </p>}
             {authMode === "login" && demoLoginsEnabled && (
               <div className="demo-accounts">
-                <p className="demo-heading">{isStaffLogin ? "Enter an SCC admin demo dashboard" : "Enter a demo dashboard"}</p>
+                <p className="demo-heading">{isStaffLogin ? "Enter the SCC demo dashboard" : "Demo accounts — tap to sign in"}</p>
                 {!isStaffLogin && demoAccounts.map((account) => (
                   <button
                     className="demo-account"
@@ -507,7 +507,7 @@ export default function App() {
                     <span className="demo-account-avatar" aria-hidden="true">{account.name.charAt(0)}</span>
                     <span className="demo-account-info">
                       <b>{account.name}</b>
-                      <span>{account.email} · {account.password}</span>
+                      <span>Email: {account.email} · Password: {account.password}</span>
                     </span>
                     <span className="demo-use">{authSubmitting ? "Please wait…" : "Enter →"}</span>
                   </button>
@@ -522,7 +522,7 @@ export default function App() {
                     <span className="demo-account-avatar" aria-hidden="true">A</span>
                     <span className="demo-account-info">
                       <b>{demoAdminAccount.name}</b>
-                      <span>{demoAdminAccount.email} · {demoAdminAccount.password}</span>
+                      <span>Email: {demoAdminAccount.email} · Password: {demoAdminAccount.password}</span>
                     </span>
                     <span className="demo-use">{authSubmitting ? "Please wait…" : "Enter →"}</span>
                   </button>
@@ -539,9 +539,17 @@ export default function App() {
               <section className="staff-login" aria-label="SCC staff sign in">
                 <div>
                   <strong>City Corporation staff?</strong>
-                  <p>Use your SCC account to review and manage community reports.</p>
+                  <p>Demo: {demoAdminAccount.email} · {demoAdminAccount.password}</p>
                 </div>
-                <a className="button button-quiet button-full" href="/admin">SCC staff sign in <span aria-hidden="true">→</span></a>
+                <button
+                  className="button button-quiet button-full"
+                  type="button"
+                  disabled={authSubmitting}
+                  onClick={() => handleDemoLogin(demoAdminAccount)}
+                >
+                  {authSubmitting ? "Please wait..." : "Enter SCC dashboard"}
+                  {!authSubmitting && <span aria-hidden="true">→</span>}
+                </button>
               </section>
             )}
           </div>

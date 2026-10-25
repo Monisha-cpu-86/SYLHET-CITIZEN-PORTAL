@@ -172,7 +172,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .demo-account-avatar { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #075f50; background: var(--color-primary-soft); font-size: 14px; font-weight: 700; }
 .demo-account-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
 .demo-account-info b { color: var(--color-text); font-size: 13px; }
-.demo-account-info > span { overflow: hidden; color: var(--color-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.demo-account-info > span { color: var(--color-secondary); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .demo-use { color: var(--color-primary); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .demo-account:hover:not(:disabled) { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .demo-warning { margin: 8px 0 0; color: var(--color-error); font-size: 12px; line-height: 1.5; }

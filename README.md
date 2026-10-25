@@ -88,7 +88,7 @@ Use **Vercel for the React/Vite frontend** and **Render for the Express API and 
 
 The Render API and MySQL must be in the same region so the API can connect to MySQL using the private hostname `civicpulse-mysql:3306`. MySQL is not exposed to the public internet. The API Blueprint attaches persistent disks for MySQL data and report photos. Back up MySQL with database-native exports; do not rely on disk snapshots as the only database backup. Production does not seed the local citizen demo users or sample reports unless you deliberately set `ENABLE_DEMO_LOGINS=true`.
 
-To enable public one-click demo login on Vercel, set `ENABLE_DEMO_LOGINS=true` on the Render API and `VITE_ENABLE_DEMO_LOGINS=true` in Vercel Production, then redeploy:
+The frontend always displays the demo email/password choices. To make those accounts work on the deployed site, set `ENABLE_DEMO_LOGINS=true` on the Render API so it seeds the citizen demo accounts, sample reports, and read-only SCC demo account. Redeploy the API after changing this setting. Keep this enabled only on a sandbox database with disposable data.
 
 | Demo account | Email | Password |
 |-------------|-------|----------|
