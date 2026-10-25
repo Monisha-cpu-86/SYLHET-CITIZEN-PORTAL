@@ -10,6 +10,8 @@ import {
   DB_PORT,
   DB_USER,
   IS_DEVELOPMENT,
+  MYSQL_CA_CERT,
+  MYSQL_SSL,
   OFFICER_EMAIL,
   OFFICER_PASSWORD,
 } from './config/env.js';
@@ -20,6 +22,13 @@ const db = mysql.createPool({
   user: DB_USER,
   password: DB_PASSWORD,
   database: DB_NAME,
+  ...(MYSQL_SSL
+    ? {
+        ssl: MYSQL_CA_CERT
+          ? { ca: MYSQL_CA_CERT, rejectUnauthorized: true }
+          : { rejectUnauthorized: false },
+      }
+    : {}),
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

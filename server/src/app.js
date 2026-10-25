@@ -15,6 +15,7 @@ import errorHandler from './middleware/errorHandler.js';
 
 const app = express();
 app.set('etag', false);
+app.locals.databaseReady = false;
 
 // Basic security middlewares
 app.use(helmet());
@@ -32,6 +33,10 @@ app.use((req, res, next) => {
     return res.status(403).json({ message: 'Request origin is not allowed.' });
   }
   next();
+});
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || app.locals.databaseReady) return next();
+  return res.status(503).json({ status: 'starting', message: 'Database is initializing.' });
 });
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
@@ -66,6 +71,9 @@ app.use('/api/admin', adminRouter);
 
 // Health check (no auth needed)
 app.get('/api/health', async (req, res, next) => {
+  if (!app.locals.databaseReady) {
+    return res.status(503).json({ status: 'starting', database: 'connecting' });
+  }
   try {
     await db.query('SELECT 1');
     res.json({ status: 'ok', database: 'mysql' });

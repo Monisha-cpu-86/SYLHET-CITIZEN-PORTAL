@@ -1,61 +1,36 @@
-envVarGroups:
-  - name: civicpulse-mysql-credentials
-    envVars:
-      - key: MYSQL_PASSWORD
-        sync: false
-
 services:
-  - type: pserv
-    name: civicpulse-mysql
-    runtime: docker
-    plan: starter
-    region: singapore
-    dockerfilePath: ./database/mysql/Dockerfile
-    dockerContext: ./database/mysql
-    disk:
-      name: civicpulse-mysql-data
-      mountPath: /var/lib/mysql
-      sizeGB: 10
-    envVars:
-      - key: MYSQL_DATABASE
-        value: civicpulse_bd
-      - key: MYSQL_USER
-        value: civicpulse
-      - key: MYSQL_ROOT_PASSWORD
-        sync: false
-      - fromGroup: civicpulse-mysql-credentials
-
   - type: web
     name: civicpulse-sylhet-api
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     buildCommand: npm ci --prefix server
     startCommand: npm start --prefix server
     healthCheckPath: /api/health
-    disk:
-      name: civicpulse-report-uploads
-      mountPath: /opt/render/project/src/server/data/uploads
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: ENABLE_DEMO_LOGINS
-        sync: false
+        value: "true"
       - key: SESSION_SECRET
         generateValue: true
       - key: CLIENT_ORIGIN
         sync: false
-      - key: DB_HOST
-        value: civicpulse-mysql
-      - key: DB_PORT
-        value: "3306"
-      - key: DB_NAME
-        value: civicpulse_bd
-      - key: DB_USER
-        value: civicpulse
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_SSL
+        value: "true"
+      - key: MYSQL_CA_CERT
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - fromGroup: civicpulse-mysql-credentials
