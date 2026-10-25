@@ -36,15 +36,30 @@ Keep that terminal open. The database files and local credentials stay in your W
 
 ## Run the app
 
-In a second terminal, from the project root:
+Open PowerShell in the repository folder. Install root development tools, then install the client and server dependencies:
 
-```bash
-npm install
-npm run dev
+```powershell
+npm.cmd install
+npm.cmd run setup
+```
+
+If `server/.env` does not exist yet, create it and enter your local MySQL settings:
+
+```powershell
+Copy-Item server\.env.example server\.env
+notepad server\.env
+```
+
+Leave MariaDB running in one terminal. Start both the API and website from the project root in another:
+
+```powershell
+npm.cmd run dev
 ```
 
 - Web app: <http://localhost:5173>
 - API health: <http://localhost:5000/api/health>
+
+To sign in, use a demo card on the login screen; in development the cards open the selected citizen or SCC staff dashboard directly. To start only one part, run `npm.cmd run server` or `npm.cmd run client` in the project root.
 
 ## Demo citizen accounts
 
