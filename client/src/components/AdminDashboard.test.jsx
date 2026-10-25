@@ -67,7 +67,8 @@ describe('admin report management', () => {
 
   it('explains why report controls are unavailable to the read-only demo account', async () => {
     const user = userEvent.setup();
-    render(<AdminDashboard user={{ name: 'Demo Viewer', role: 'viewer' }} onLogout={vi.fn()} />);
+    const onLogout = vi.fn();
+    render(<AdminDashboard user={{ name: 'Demo Viewer', role: 'viewer' }} onLogout={onLogout} />);
     await openReport(user);
 
     expect(screen.getByText('Read-only demo account').closest('.admin-readonly-notice')).toHaveTextContent('sign in with the SCC staff email and password configured in Render');
@@ -75,6 +76,8 @@ describe('admin report management', () => {
     expect(screen.queryByRole('button', { name: /Accept \/ acknowledge report/ })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Public response')).toBeDisabled();
     expect(screen.getByLabelText('Estimated due date')).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Sign out and switch to SCC staff' }));
+    expect(onLogout).toHaveBeenCalledOnce();
   });
 
   it('allows staff to enter and save public responses and due dates', async () => {

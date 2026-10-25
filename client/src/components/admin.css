@@ -8,7 +8,9 @@
 .admin-readonly-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #e8c77e; border-radius: 10px; background: #fff8e8; color: #684707; }
 .admin-readonly-notice p { margin: 4px 0 0; color: #684707; font-size: 13px; line-height: 1.5; }
 .admin-readonly-notice .button { flex: 0 0 auto; padding: 0 12px; border: 1px solid #d6b568; background: #fff; }
-.admin-readonly-inline { margin: 14px 0; padding: 12px; border-radius: 8px; color: #684707; background: #fff8e8; font-size: 13px; line-height: 1.5; }
+.admin-readonly-inline { display: grid; gap: 10px; margin: 14px 0; padding: 12px; border-radius: 8px; color: #684707; background: #fff8e8; font-size: 13px; line-height: 1.5; }
+.admin-readonly-inline p { margin: 0; }
+.admin-readonly-inline .button { width: fit-content; min-height: 38px; padding: 0 12px; border: 1px solid #d6b568; background: #fff; }
 .admin-dialog-message { margin: 14px 0 0; padding: 11px 12px; border: 1px solid; border-radius: 8px; font-size: 13px; line-height: 1.5; }
 .admin-dialog-error { border-color: #e7b8b4; color: var(--color-error); background: var(--color-error-soft); }
 .admin-dialog-success { border-color: #acd7c6; color: var(--color-success); background: var(--color-success-soft); }

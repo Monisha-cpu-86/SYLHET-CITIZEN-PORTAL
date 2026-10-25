@@ -316,7 +316,10 @@ export default function AdminDashboard({ user, onLogout }) {
             {dialogError && <p className="admin-dialog-message admin-dialog-error" role="alert">{dialogError}</p>}
             {dialogMessage && <p className="admin-dialog-message admin-dialog-success" role="status">{dialogMessage}</p>}
             {user.role === "viewer" && (
-              <p className="admin-readonly-inline" role="note">This demo account is view-only. Sign in with SCC staff credentials to accept reports or edit these fields.</p>
+              <div className="admin-readonly-inline" role="note">
+                <p>This demo account is view-only. Sign in with the SCC staff email and password configured in Render to accept reports or edit these fields.</p>
+                <button className="button button-quiet" type="button" onClick={onLogout}>Sign out and switch to SCC staff</button>
+              </div>
             )}
             {selected.photos?.map((photo) => <img className="admin-report-photo" key={photo.id} src={`/api/complaints/photos/${photo.id}`} alt={`Citizen photo for ${selected.report_code}`} />)}
             {selected.latitude != null && <LocationMap location={selected} height={220} />}
