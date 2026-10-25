@@ -9,6 +9,10 @@ const demoAccounts = [
   { name: "Ayesha Rahman", email: "ayesha@example.com", password: "ayesha123" },
   { name: "Tanvir Hasan", email: "tanvir@example.com", password: "tanvir123" },
 ];
+const demoAdminAccount = import.meta.env.DEV
+  ? { name: "SCC Super Admin", email: "admin@scc.local", password: "SCCadmin2026!" }
+  : { name: "SCC Dashboard (read-only)", email: "scc-dashboard-demo@scc.local", password: "SylhetReadOnly2026!" };
+const demoLoginsEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGINS === "true";
 
 async function request(path, options = {}) {
   let response;
@@ -212,9 +216,37 @@ export default function App() {
       setUser(signedInUser);
       setAuthForm({ name: "", email: "", password: "" });
       setAuthErrors({});
+      if (["super_admin", "scc_officer", "viewer"].includes(signedInUser.role)) {
+        if (window.location.pathname !== "/admin") window.location.assign("/admin");
+        return;
+      }
       await Promise.all([loadComplaints(), loadNotifications()]);
     } catch (submitError) {
       setError(submitError.message);
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function handleDemoLogin(account) {
+    setError("");
+    setNotice("");
+    setAuthSubmitting(true);
+    try {
+      const signedInUser = await request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: account.email, password: account.password }),
+      });
+      setUser(signedInUser);
+      setAuthForm({ name: "", email: "", password: "" });
+      setAuthErrors({});
+      if (["super_admin", "scc_officer", "viewer"].includes(signedInUser.role)) {
+        if (window.location.pathname !== "/admin") window.location.assign("/admin");
+        return;
+      }
+      await Promise.all([loadComplaints(), loadNotifications()]);
+    } catch (loginError) {
+      setError(loginError.message);
     } finally {
       setAuthSubmitting(false);
     }
@@ -461,24 +493,43 @@ export default function App() {
                 {authMode === "login" ? "Create an account" : "Sign in"}
               </button>
             </p>}
-            {authMode === "login" && !isStaffLogin && import.meta.env.DEV && (
+            {authMode === "login" && demoLoginsEnabled && (
               <div className="demo-accounts">
-                <p className="demo-heading">Explore with a demo account</p>
-                {demoAccounts.map((account) => (
+                <p className="demo-heading">{isStaffLogin ? "Enter an SCC admin demo dashboard" : "Enter a demo dashboard"}</p>
+                {!isStaffLogin && demoAccounts.map((account) => (
                   <button
                     className="demo-account"
                     key={account.email}
                     type="button"
-                    onClick={() => setAuthForm({ name: "", email: account.email, password: account.password })}
+                    disabled={authSubmitting}
+                    onClick={() => handleDemoLogin(account)}
                   >
                     <span className="demo-account-avatar" aria-hidden="true">{account.name.charAt(0)}</span>
                     <span className="demo-account-info">
                       <b>{account.name}</b>
                       <span>{account.email} · {account.password}</span>
                     </span>
-                    <span className="demo-use">Use →</span>
+                    <span className="demo-use">{authSubmitting ? "Please wait…" : "Enter →"}</span>
                   </button>
                 ))}
+                {demoAdminAccount.email && demoAdminAccount.password && (
+                  <button
+                    className="demo-account demo-admin-account"
+                    type="button"
+                    disabled={authSubmitting}
+                    onClick={() => handleDemoLogin(demoAdminAccount)}
+                  >
+                    <span className="demo-account-avatar" aria-hidden="true">A</span>
+                    <span className="demo-account-info">
+                      <b>{demoAdminAccount.name}</b>
+                      <span>{demoAdminAccount.email} · {demoAdminAccount.password}</span>
+                    </span>
+                    <span className="demo-use">{authSubmitting ? "Please wait…" : "Enter →"}</span>
+                  </button>
+                )}
+                {import.meta.env.PROD && (
+                  <p className="demo-warning">Demo access is public. Never enable it on an SCC production database.</p>
+                )}
               </div>
             )}
             {authMode === "login" && isStaffLogin && (

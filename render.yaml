@@ -40,6 +40,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ENABLE_DEMO_LOGINS
+        sync: false
       - key: SESSION_SECRET
         generateValue: true
       - key: CLIENT_ORIGIN

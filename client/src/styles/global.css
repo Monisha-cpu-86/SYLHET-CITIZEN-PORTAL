@@ -174,6 +174,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .demo-account-info b { color: var(--color-text); font-size: 13px; }
 .demo-account-info > span { overflow: hidden; color: var(--color-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .demo-use { color: var(--color-primary); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.demo-account:hover:not(:disabled) { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.demo-warning { margin: 8px 0 0; color: var(--color-error); font-size: 12px; line-height: 1.5; }
 .staff-login { display: grid; gap: 12px; margin-top: 22px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: #f6faf8; }
 .staff-login strong { color: var(--color-text); font-size: 14px; }
 .staff-login p { margin: 4px 0 0; color: var(--color-secondary); font-size: 13px; line-height: 1.5; }

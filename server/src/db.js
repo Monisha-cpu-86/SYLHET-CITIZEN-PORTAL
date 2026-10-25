@@ -269,11 +269,19 @@ export async function initializeDatabase() {
   await ensureIndex('complaints', 'complaints_user_idempotency_unique', 'user_id, idempotency_key', true);
 
   const demoIds = new Map();
+  let adminId;
   if (IS_DEVELOPMENT || process.env.ADMIN_PASSWORD) {
-    await seedAccount({ email: ADMIN_EMAIL, name: 'SCC Super Admin', password: ADMIN_PASSWORD, role: 'super_admin' });
+    adminId = await seedAccount({ email: ADMIN_EMAIL, name: 'SCC Super Admin', password: ADMIN_PASSWORD, role: 'super_admin' });
   }
 
-  if (IS_DEVELOPMENT) {
+  if (IS_DEVELOPMENT || process.env.ENABLE_DEMO_LOGINS === 'true') {
+    await seedAccount({
+      email: 'scc-dashboard-demo@scc.local',
+      name: 'SCC Dashboard Demo',
+      password: 'SylhetReadOnly2026!',
+      role: 'viewer',
+    });
+
     for (const demoUser of demoUsers) {
       const userId = await seedAccount({ ...demoUser, role: 'citizen' });
       demoIds.set(demoUser.email, userId);
@@ -291,13 +299,16 @@ export async function initializeDatabase() {
       }
     }
 
-    const officerId = await seedAccount({
-      email: OFFICER_EMAIL,
-      name: 'SCC Field Officer',
-      password: OFFICER_PASSWORD,
-      role: 'scc_officer',
-      department: 'Roads',
-    });
+    let reportAssigneeId = adminId;
+    if (IS_DEVELOPMENT) {
+      reportAssigneeId = await seedAccount({
+        email: OFFICER_EMAIL,
+        name: 'SCC Field Officer',
+        password: OFFICER_PASSWORD,
+        role: 'scc_officer',
+        department: 'Roads',
+      });
+    }
 
     for (const [index, sample] of sylhetSampleReports.entries()) {
       const [type, description, ward, latitude, longitude, priority, status, department, dayOffset] = sample;
@@ -311,7 +322,7 @@ export async function initializeDatabase() {
           (user_id, type, ward, description, status, priority, latitude, longitude, location_text,
            assigned_department, assigned_to, demo_key, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, type, ward, description, status, priority, latitude, longitude, `${ward}, Sylhet City`, department, officerId, demoKey, createdAt, createdAt],
+        [userId, type, ward, description, status, priority, latitude, longitude, `${ward}, Sylhet City`, department, reportAssigneeId, demoKey, createdAt, createdAt],
       );
       await seedHistoryIfMissing(result.insertId, userId, status, createdAt);
     }
