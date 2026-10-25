@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://civicpulse-sylhet-api.onrender.com/api/:path*"
+      "destination": "https://sylhet-citizen-portal.onrender.com/api/:path*"
     },
     {
       "source": "/admin",
