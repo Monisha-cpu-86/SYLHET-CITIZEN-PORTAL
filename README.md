@@ -2,6 +2,8 @@
 
 A citizen reporting demo for issues within Sylhet City Corporation (SCC). The frontend uses React and Vite, the API uses Express, and persistent data is stored in MySQL-compatible MariaDB.
 
+See [the project proposal and technical documentation](./docs/CIVICPULSE_PROJECT_PROPOSAL.md) for the project scope, user workflows, database schema, UI wireframes, CRUD examples, API overview, deployment architecture, and future enhancements.
+
 ## Prerequisites
 
 - Node.js 18 or newer
