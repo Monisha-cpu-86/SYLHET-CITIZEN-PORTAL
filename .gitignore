@@ -1,0 +1,19 @@
+node_modules/
+*.metadata.json
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+# SQLite DB
+server/data/*.db
+server/data/uploads/
+# Vite cache
+.vite
+.vite/**
+# IDE files
+.vscode/
+.idea/
+# Docker artifacts
+docker-compose.override.yml
