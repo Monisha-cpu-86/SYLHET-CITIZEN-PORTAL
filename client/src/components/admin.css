@@ -5,6 +5,13 @@
 .admin-title-row, .admin-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .admin-title-row h1 { margin: 7px 0; font-size: clamp(27px, 4vw, 38px); letter-spacing: -.8px; }
 .admin-title-row p { margin: 0; }
+.admin-readonly-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #e8c77e; border-radius: 10px; background: #fff8e8; color: #684707; }
+.admin-readonly-notice p { margin: 4px 0 0; color: #684707; font-size: 13px; line-height: 1.5; }
+.admin-readonly-notice .button { flex: 0 0 auto; padding: 0 12px; border: 1px solid #d6b568; background: #fff; }
+.admin-readonly-inline { margin: 14px 0; padding: 12px; border-radius: 8px; color: #684707; background: #fff8e8; font-size: 13px; line-height: 1.5; }
+.admin-dialog-message { margin: 14px 0 0; padding: 11px 12px; border: 1px solid; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.admin-dialog-error { border-color: #e7b8b4; color: var(--color-error); background: var(--color-error-soft); }
+.admin-dialog-success { border-color: #acd7c6; color: var(--color-success); background: var(--color-success-soft); }
 .admin-metrics { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap: 12px; }
 .admin-metric { display: grid; min-height: 115px; align-content: start; gap: 8px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: #fff; }
 .admin-metric span, .admin-metric small { color: var(--color-muted); font-size: 12px; }
@@ -49,6 +56,8 @@
 .admin-edit-form { margin-top: 20px; }
 .admin-edit-form label { display: grid; gap: 6px; color: var(--color-text); font-size: 13px; font-weight: 600; }
 .admin-edit-form input, .admin-edit-form select, .admin-edit-form textarea { width: 100%; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: #fff; }
+.admin-edit-form :disabled { color: #65758a; background: #f2f5f7; cursor: not-allowed; opacity: .8; }
+.acknowledge-report-button { width: 100%; margin: 14px 0 0; padding: 0 14px; }
 .report-timeline { display: grid; gap: 12px; margin: 18px 0; padding-left: 22px; }
 .report-timeline li small { display: block; margin-top: 4px; color: var(--color-muted); }
 .report-timeline li p { margin: 5px 0; color: var(--color-secondary); }
@@ -69,6 +78,7 @@
   .admin-content { gap: 14px; padding: 22px 12px 40px; }
   .admin-title-row { align-items: flex-start; }
   .admin-title-row > .button { display: none; }
+  .admin-readonly-notice { align-items: flex-start; flex-direction: column; }
   .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .admin-metric { min-height: 96px; padding: 12px; }
   .admin-metric strong { font-size: 23px; }

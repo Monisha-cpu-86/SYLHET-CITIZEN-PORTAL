@@ -55,6 +55,8 @@ export default function AdminDashboard({ user, onLogout }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [dialogMessage, setDialogMessage] = useState("");
+  const [dialogError, setDialogError] = useState("");
 
   const refresh = useCallback(async () => {
     const params = new URLSearchParams({ page: "1", limit: "100" });
@@ -103,6 +105,7 @@ export default function AdminDashboard({ user, onLogout }) {
         internal_notes: report.internal_notes || "",
         dueAt: report.due_at ? new Date(report.due_at).toISOString().slice(0, 10) : "",
       });
+      setDialogError("");
       setError("");
     } catch (loadError) {
       setError(loadError.message);
@@ -113,8 +116,8 @@ export default function AdminDashboard({ user, onLogout }) {
     event.preventDefault();
     if (!selected) return;
     setBusy(true);
-    setError("");
-    setMessage("");
+    setDialogError("");
+    setDialogMessage("");
     try {
       const body = { ...draft, assigned_to: draft.assigned_to || null, dueAt: draft.dueAt || null };
       const updated = await adminRequest(`/api/admin/reports/${selected.id}`, {
@@ -122,11 +125,31 @@ export default function AdminDashboard({ user, onLogout }) {
         body: JSON.stringify(body),
       });
       setSelected({ ...selected, ...updated });
-      setMessage("Report updates saved.");
       await refresh();
       await openReport(selected.id);
+      setDialogMessage("Report updates saved.");
     } catch (saveError) {
-      setError(saveError.message);
+      setDialogError(saveError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function acknowledgeReport() {
+    if (!selected || selected.status !== "submitted") return;
+    setBusy(true);
+    setDialogError("");
+    setDialogMessage("");
+    try {
+      await adminRequest(`/api/admin/reports/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "acknowledged" }),
+      });
+      await refresh();
+      await openReport(selected.id);
+      setDialogMessage(`${selected.report_code} accepted and acknowledged.`);
+    } catch (acknowledgeError) {
+      setDialogError(acknowledgeError.message);
     } finally {
       setBusy(false);
     }
@@ -179,6 +202,12 @@ export default function AdminDashboard({ user, onLogout }) {
           <div><span className="eyebrow">SYLHET CITY CORPORATION</span><h1>Operations dashboard</h1><p className="muted">Review reports, coordinate departments, and keep citizens updated.</p></div>
           <a className="button button-quiet" href="/">Citizen portal</a>
         </div>
+        {user.role === "viewer" && (
+          <div className="admin-readonly-notice" role="note">
+            <div><strong>Read-only demo account</strong><p>Report editing and acceptance are disabled. Sign out, then sign in with the SCC staff email and password configured in Render to manage reports.</p></div>
+            <button className="button button-quiet" type="button" onClick={onLogout}>Sign out to switch account</button>
+          </div>
+        )}
         {error && <div className="message-banner banner-error" role="alert">{error}</div>}
         {message && <div className="message-banner banner-success" role="status">{message}</div>}
         <section className="admin-metrics" aria-label="Report metrics">
@@ -279,6 +308,16 @@ export default function AdminDashboard({ user, onLogout }) {
             <button className="dialog-close" type="button" onClick={() => setSelected(null)} aria-label="Close report details">×</button>
             <span className="eyebrow">{selected.report_code}</span><h2 id="report-dialog-title">{selected.type} · {selected.ward}</h2>
             <p>{selected.description}</p><p className="field-hint">{selected.citizen_name} · {selected.citizen_email} · {selected.location_text || "No location description"}</p>
+            {selected.status === "submitted" && user.role !== "viewer" && (
+              <button className="button button-primary acknowledge-report-button" type="button" onClick={acknowledgeReport} disabled={busy}>
+                {busy ? "Accepting..." : "Accept / acknowledge report"}
+              </button>
+            )}
+            {dialogError && <p className="admin-dialog-message admin-dialog-error" role="alert">{dialogError}</p>}
+            {dialogMessage && <p className="admin-dialog-message admin-dialog-success" role="status">{dialogMessage}</p>}
+            {user.role === "viewer" && (
+              <p className="admin-readonly-inline" role="note">This demo account is view-only. Sign in with SCC staff credentials to accept reports or edit these fields.</p>
+            )}
             {selected.photos?.map((photo) => <img className="admin-report-photo" key={photo.id} src={`/api/complaints/photos/${photo.id}`} alt={`Citizen photo for ${selected.report_code}`} />)}
             {selected.latitude != null && <LocationMap location={selected} height={220} />}
             {selected.history?.length > 0 && <ol className="report-timeline">{selected.history.map((event) => <li key={event.id}><b>{statusLabels[event.to_status] || event.to_status}</b><small>{new Date(event.created_at).toLocaleString()} · {event.changed_by_name || "Citizen"}</small>{event.public_note && <p>{event.public_note}</p>}</li>)}</ol>}
