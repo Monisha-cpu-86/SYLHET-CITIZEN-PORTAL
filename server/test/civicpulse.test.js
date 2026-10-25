@@ -3,6 +3,7 @@ import { after, test } from 'node:test';
 import sharp from 'sharp';
 import { isWithinSccBounds, SCC_WARDS, REPORT_STATUSES } from '../../shared/sylhet.js';
 import { requireRoles, requireAuth } from '../src/middleware/auth.js';
+import MySQLSessionStore from '../src/middleware/mysqlSessionStore.js';
 import { removeReportImage, storeReportImage } from '../src/services/photos.js';
 
 const temporaryFiles = [];
@@ -43,6 +44,33 @@ test('authentication guard rejects unauthenticated requests', () => {
   const response = { status(code) { status = code; return this; }, json() { return this; } };
   requireAuth({ session: {} }, response, () => assert.fail('Unauthenticated request must not pass.'));
   assert.equal(status, 401);
+});
+
+test('MySQL session store preserves a login session across store instances', async () => {
+  const rows = new Map();
+  const database = {
+    async execute(query, params) {
+      if (query.startsWith('INSERT INTO sessions')) {
+        rows.set(params[0], { session_data: params[1], expires_at: params[2] });
+        return [{ affectedRows: 1 }];
+      }
+      if (query.startsWith('SELECT session_data, expires_at FROM sessions')) {
+        const row = rows.get(params[0]);
+        return [row ? [row] : []];
+      }
+      throw new Error(`Unexpected session query: ${query}`);
+    },
+  };
+  const storedSession = {
+    cookie: { maxAge: 60_000 },
+    user: { id: 7, email: 'citizen@example.test', role: 'citizen' },
+  };
+  const firstStore = new MySQLSessionStore(database);
+  await new Promise((resolve, reject) => firstStore.set('session-after-restart', storedSession, (error) => error ? reject(error) : resolve()));
+
+  const restartedStore = new MySQLSessionStore(database);
+  const restored = await new Promise((resolve, reject) => restartedStore.get('session-after-restart', (error, value) => error ? reject(error) : resolve(value)));
+  assert.deepEqual(restored.user, storedSession.user);
 });
 
 test('image service rejects fake image content and converts a valid image to metadata-free WebP', async () => {

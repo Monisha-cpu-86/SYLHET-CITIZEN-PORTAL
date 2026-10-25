@@ -148,16 +148,16 @@ The demo credentials are public and are seeded only when the Render flag is enab
 
 ## Storage and security notes
 
-- The API uses MariaDB/MySQL for application data and server-side session storage. Startup migrations are additive and retain existing citizens and reports.
+- The API uses MariaDB/MySQL for application data and server-side session storage. The custom session store persists sessions in the existing `sessions` table so they survive Render restarts; no new dependency or environment variable is needed. Keep Render's `SESSION_SECRET` unchanged to preserve current signed cookies. Rotating it invalidates existing browser sessions, and affected users must sign in again.
 - Uploaded images are checked by file signature, limited to 5 MB each and three per report, re-encoded as WebP, and stripped of EXIF metadata. The `UPLOAD_DIR` defaults to `server/data/uploads`; keep this directory private and include it in backups.
-- Browser mutations must come from the configured `CLIENT_ORIGIN`; sessions are HTTP-only and SameSite=Lax. Production cookies are Secure.
+- Browser mutations must come from the configured `CLIENT_ORIGIN`; sessions are HTTP-only, SameSite=Lax, path `/`, and valid for 24 hours. The cookie intentionally has no `Domain`, so Vercel's same-origin `/api` rewrite stores it on the Vercel site rather than the Render hostname. Production cookies are Secure; Express trusts the single Render proxy hop to correctly detect HTTPS.
 - Keep the database bound to a private interface, use a least-privilege database user, and back up both the MySQL database and private uploads directory.
 - OpenStreetMap tiles and Leaflet maps require an internet connection. SCC map bounds are approximate and must not be treated as authoritative ward or legal boundaries. Reverse-geocoding is not enabled.
 
-The automated backend tests can be run with:
+Run the backend integration tests and frontend report-flow tests with:
 
 ```bash
-npm test --prefix server
+npm test
 ```
 
 ## Build

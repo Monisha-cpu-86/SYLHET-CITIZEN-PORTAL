@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import bcrypt from 'bcryptjs';
+import sharp from 'sharp';
 import app from '../src/app.js';
 import db from '../src/db.js';
+import { removeReportImage } from '../src/services/photos.js';
 import { CLIENT_ORIGIN } from '../src/config/env.js';
 import { SCC_REPORT_CATEGORIES } from '../../shared/sylhet.js';
 
@@ -24,8 +26,11 @@ let users;
 let complaints;
 let history;
 let sessions;
+let photos;
+let storedPhotoFiles;
 let nextComplaintId;
 let nextHistoryId;
+let nextPhotoId;
 
 const originalExecute = db.execute;
 const originalGetConnection = db.getConnection;
@@ -112,6 +117,22 @@ function createMockConnection() {
         });
         return writeResult({ insertId: nextHistoryId - 1 });
       }
+      if (query.startsWith('INSERT INTO complaint_photos')) {
+        const [complaint_id, file_name, mime_type, file_size, width, height, created_at] = params;
+        storedPhotoFiles.push(file_name);
+        photos.push({
+          id: nextPhotoId++,
+          complaint_id,
+          file_name,
+          mime_type,
+          file_size,
+          width,
+          height,
+          photo_kind: 'issue',
+          created_at,
+        });
+        return writeResult({ insertId: nextPhotoId - 1 });
+      }
       if (query.startsWith('INSERT INTO notifications') || query.startsWith('INSERT INTO audit_log')) {
         return writeResult({ insertId: 1 });
       }
@@ -197,7 +218,7 @@ async function mockExecute(sql, params = []) {
     return executeResult(history.filter((entry) => params.map(Number).includes(entry.complaint_id)));
   }
   if (query.startsWith('SELECT id, complaint_id, mime_type, file_size, width, height, photo_kind FROM complaint_photos')) {
-    return executeResult([]);
+    return executeResult(photos.filter((photo) => params.map(Number).includes(photo.complaint_id)));
   }
   if (query.startsWith('SELECT c.*, COALESCE(c.report_code') && query.includes('WHERE c.id = ? AND c.user_id = ?')) {
     const complaint = complaints.find((entry) => entry.id === Number(params[0])
@@ -241,7 +262,7 @@ async function mockExecute(sql, params = []) {
     })));
   }
   if (query.startsWith('SELECT id, mime_type, file_size, width, height, photo_kind, created_at FROM complaint_photos')) {
-    return executeResult([]);
+    return executeResult(photos.filter((photo) => photo.complaint_id === Number(params[0])));
   }
   if (query.startsWith('SELECT * FROM complaints WHERE id = ?')) {
     const complaint = complaints.find((entry) => entry.id === Number(params[0]));
@@ -259,8 +280,11 @@ test('API integration: login, report visibility, ownership, and public status re
   complaints = [];
   history = [];
   sessions = new Map();
+  photos = [];
+  storedPhotoFiles = [];
   nextComplaintId = 1;
   nextHistoryId = 1;
+  nextPhotoId = 1;
   db.execute = mockExecute;
   db.getConnection = async () => createMockConnection();
 
@@ -280,21 +304,29 @@ test('API integration: login, report visibility, ownership, and public status re
   assert.deepEqual(await startupHealth.json(), { status: 'starting', database: 'connecting' });
   app.locals.databaseReady = true;
 
-  async function request(path, { cookie, method = 'GET', body } = {}) {
+  async function request(path, { cookie, method = 'GET', body, headers = {} } = {}) {
+    const isFormData = body instanceof FormData;
     const response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
         ...(cookie ? { Cookie: cookie } : {}),
-        ...(body ? { 'Content-Type': 'application/json', Origin: CLIENT_ORIGIN } : {}),
+        ...headers,
+        ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...(body ? { Origin: CLIENT_ORIGIN } : {}),
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
     });
     return {
       response,
       body: response.headers.get('content-type')?.includes('application/json') ? await response.json() : null,
       cookie: response.headers.get('set-cookie')?.split(';')[0] || cookie,
+      setCookie: response.headers.get('set-cookie') || '',
     };
   }
+
+  assert.equal(app.get('trust proxy'), 1);
+  const unauthenticated = await request('/api/complaints');
+  assert.equal(unauthenticated.response.status, 401);
 
   const citizenSessions = new Map();
   for (const user of citizens) {
@@ -305,6 +337,10 @@ test('API integration: login, report visibility, ownership, and public status re
       });
       assert.equal(login.response.status, 200);
       assert.deepEqual(login.body, userSafe(user));
+      assert.match(login.setCookie, /HttpOnly/i);
+      assert.match(login.setCookie, /Path=\//i);
+      assert.match(login.setCookie, /SameSite=Lax/i);
+      assert.doesNotMatch(login.setCookie, /Domain=/i);
       const me = await request('/api/auth/me', { cookie: login.cookie });
       assert.equal(me.response.status, 200);
       assert.deepEqual(me.body, userSafe(user));
@@ -323,6 +359,19 @@ test('API integration: login, report visibility, ownership, and public status re
     body: { email: citizens[0].email, password: 'incorrect' },
   });
   assert.equal(invalidLogin.response.status, 401);
+
+  const missingLocation = await request('/api/complaints', {
+    method: 'POST',
+    cookie: citizenSessions.get(citizens[0].id),
+    body: {
+      type: SCC_REPORT_CATEGORIES[0],
+      description: 'This report has no pin and no location opt out.',
+      ward: 'Ward 12',
+      priority: 'normal',
+    },
+  });
+  assert.equal(missingLocation.response.status, 400);
+  assert.match(missingLocation.body.message, /map location|without sharing your location/);
 
   const submit = await request('/api/complaints', {
     method: 'POST',
@@ -345,16 +394,37 @@ test('API integration: login, report visibility, ownership, and public status re
   assert.equal(submit.body.history.length, 1);
   assert.equal(submit.body.internal_notes, undefined);
 
+  const photo = await sharp({
+    create: { width: 48, height: 48, channels: 3, background: { r: 80, g: 130, b: 40 } },
+  }).png().toBuffer();
+  const formData = new FormData();
+  formData.append('type', SCC_REPORT_CATEGORIES[0]);
+  formData.append('description', 'This report includes a valid uploaded image.');
+  formData.append('ward', 'Ward 12');
+  formData.append('priority', 'normal');
+  formData.append('locationNotShared', 'true');
+  formData.append('photos', new Blob([photo], { type: 'image/png' }), 'integration-photo.png');
+  const photoSubmit = await request('/api/complaints', {
+    method: 'POST',
+    cookie: citizenSessions.get(citizens[0].id),
+    body: formData,
+    headers: { 'Idempotency-Key': 'integration-photo-roundtrip' },
+  });
+  assert.equal(photoSubmit.response.status, 201);
+  assert.equal(photoSubmit.body.photos.length, 1);
+  assert.equal(photoSubmit.body.photos[0].mime_type, 'image/webp');
+
   const adminReports = await request('/api/admin/reports', { cookie: adminLogin.cookie });
   assert.equal(adminReports.response.status, 200);
-  assert.equal(adminReports.body.total, 1);
-  assert.equal(adminReports.body.items[0].report_code, submit.body.report_code);
-  assert.equal(adminReports.body.items[0].citizen_email, citizens[0].email);
+  assert.equal(adminReports.body.total, 2);
+  const adminSubmittedReport = adminReports.body.items.find((item) => item.id === submit.body.id);
+  assert.equal(adminSubmittedReport.report_code, submit.body.report_code);
+  assert.equal(adminSubmittedReport.citizen_email, citizens[0].email);
 
   const ownerListing = await request('/api/complaints', { cookie: citizenSessions.get(citizens[0].id) });
   assert.equal(ownerListing.response.status, 200);
-  assert.equal(ownerListing.body.total, 1);
-  assert.equal(ownerListing.body.items[0].id, submit.body.id);
+  assert.equal(ownerListing.body.total, 2);
+  assert.ok(ownerListing.body.items.some((item) => item.id === submit.body.id));
   const otherCitizenList = await request('/api/complaints', { cookie: citizenSessions.get(citizens[1].id) });
   assert.equal(otherCitizenList.response.status, 200);
   assert.equal(otherCitizenList.body.total, 0);
@@ -391,7 +461,8 @@ test('API integration: login, report visibility, ownership, and public status re
   assert.equal(adminCanReadPublicResponse.body.public_response, statusResponse.body.public_response);
 });
 
-after(() => {
+after(async () => {
+  await Promise.all((storedPhotoFiles || []).map(removeReportImage));
   db.execute = originalExecute;
   db.getConnection = originalGetConnection;
 });

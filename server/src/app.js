@@ -15,6 +15,7 @@ import errorHandler from './middleware/errorHandler.js';
 
 const app = express();
 app.set('etag', false);
+app.set('trust proxy', 1);
 app.locals.databaseReady = false;
 
 // Basic security middlewares
@@ -48,7 +49,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Session configuration – in‑memory store is fine for demo
+// Sessions persist in the same MySQL database as reports.
 app.use(session({
   name: 'civicpulse.sid',
   secret: SESSION_SECRET,
@@ -59,6 +60,7 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
+    path: '/',
     maxAge: 24 * 60 * 60 * 1000, // 1 day
   },
 }));

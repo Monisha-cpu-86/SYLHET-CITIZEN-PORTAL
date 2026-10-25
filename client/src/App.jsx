@@ -13,37 +13,72 @@ const demoAdminAccount = import.meta.env.DEV
   ? { name: "SCC Super Admin", email: "admin@scc.local", password: "SCCadmin2026!" }
   : { name: "SCC Dashboard (read-only)", email: "scc-dashboard-demo@scc.local", password: "SylhetReadOnly2026!" };
 const demoLoginsEnabled = true;
+const sessionMarkerKey = "civicpulse-session-active";
+
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 async function request(path, options = {}) {
-  let response;
-  try {
-    const headers = { ...options.headers };
-    if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-    response = await fetch(path, {
-      credentials: "include",
-      ...options,
-      headers,
-    });
-  } catch {
-    throw new Error("Cannot reach the CivicPulse Sylhet API. Check that the backend and MySQL database are running.");
-  }
+  const { onRetry, timeoutMs = 65000, ...fetchOptions } = options;
+  const headers = { ...fetchOptions.headers };
+  if (!(fetchOptions.body instanceof FormData)) headers["Content-Type"] = "application/json";
 
-  const responseText = await response.text();
-  let body = {};
-  if (responseText) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let response;
     try {
-      body = JSON.parse(responseText);
-    } catch {
-      body = { message: responseText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) };
+      response = await fetch(path, {
+        credentials: "include",
+        ...fetchOptions,
+        headers,
+        signal: controller.signal,
+      });
+    } catch (fetchError) {
+      if (attempt === 0) {
+        onRetry?.();
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+      if (fetchError.name === "AbortError") {
+        throw new Error(`The server did not respond within ${Math.round(timeoutMs / 1000)} seconds. It may be waking up; please try again.`);
+      }
+      throw new Error("Could not reach the CivicPulse Sylhet server after retrying. Check your connection and try again.");
+    } finally {
+      clearTimeout(timeout);
     }
-  }
-  if (!response.ok) {
+
+    const responseText = await response.text();
+    let body = {};
+    if (responseText) {
+      try {
+        body = JSON.parse(responseText);
+      } catch {
+        body = { message: responseText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) };
+      }
+    }
+    if (response.ok) return body;
+
+    if (response.status === 401 && !path.endsWith("/auth/login") && !path.endsWith("/auth/register")) {
+      window.dispatchEvent(new Event("civicpulse:auth-expired"));
+    }
+    if (attempt === 0 && [502, 503, 504].includes(response.status)) {
+      onRetry?.();
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
+
     const fallback = response.status >= 500
-      ? `CivicPulse Sylhet API returned ${response.status}. Check the backend logs and MySQL connection.`
-      : `Request failed (${response.status})`;
-    throw new Error(body.message || body.error || fallback);
+      ? `The server returned ${response.status}. Please try again later.`
+      : `Request failed (${response.status}).`;
+    throw new ApiError(body.message || body.error || fallback, response.status);
   }
-  return body;
+  throw new Error("The request could not be completed after retrying.");
 }
 
 function formatDate(value) {
@@ -83,7 +118,11 @@ async function compressImage(file) {
 }
 
 function focusFirstInvalid(form) {
-  requestAnimationFrame(() => form.querySelector('[aria-invalid="true"]')?.focus());
+  requestAnimationFrame(() => {
+    const firstInvalid = form.querySelector('[aria-invalid="true"]');
+    firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
+    firstInvalid?.focus();
+  });
 }
 
 function readSavedDraft() {
@@ -117,6 +156,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [complaintSubmitting, setComplaintSubmitting] = useState(false);
+  const [photosProcessing, setPhotosProcessing] = useState(false);
   const [resolvingId, setResolvingId] = useState(null);
   const [reportFiles, setReportFiles] = useState([]);
   const [location, setLocation] = useState(savedDraft.location);
@@ -131,6 +171,7 @@ export default function App() {
   const [complaintErrors, setComplaintErrors] = useState({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [wakingServer, setWakingServer] = useState(false);
 
   const loadComplaints = useCallback(async () => {
     const response = await request("/api/complaints");
@@ -142,13 +183,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function handleSessionExpired() {
+      const hadSession = localStorage.getItem(sessionMarkerKey) === "true";
+      localStorage.removeItem(sessionMarkerKey);
+      setUser(null);
+      setComplaints([]);
+      setNotifications([]);
+      setAuthMode("login");
+      setError(hadSession ? "Your session expired. Please sign in again." : "");
+      setNotice("");
+    }
+    window.addEventListener("civicpulse:auth-expired", handleSessionExpired);
+    return () => window.removeEventListener("civicpulse:auth-expired", handleSessionExpired);
+  }, []);
+
+  useEffect(() => {
+    const hadSession = localStorage.getItem(sessionMarkerKey) === "true";
     request("/api/auth/me")
       .then(async (currentUser) => {
+        localStorage.setItem(sessionMarkerKey, "true");
         setUser(currentUser);
         await Promise.all([loadComplaints(), loadNotifications()]);
       })
       .catch((loadError) => {
-        if (loadError.message !== "Not authenticated") setError(loadError.message);
+        if (loadError.status === 401) {
+          if (hadSession) setError("Your session expired. Please sign in again.");
+          return;
+        }
+        setError(loadError.message);
       })
       .finally(() => setLoading(false));
   }, [loadComplaints, loadNotifications]);
@@ -160,7 +222,14 @@ export default function App() {
   }, [reportFiles]);
 
   useEffect(() => {
-    const hasDraft = Object.values(complaintForm).some(Boolean) || location || locationNotShared;
+    const hasDraft = Boolean(
+      complaintForm.type
+      || complaintForm.description
+      || complaintForm.ward
+      || complaintForm.locationText
+      || location
+      || locationNotShared,
+    );
     try {
       if (hasDraft) {
         localStorage.setItem("civicpulse-report-draft", JSON.stringify({ complaintForm, location, locationNotShared }));
@@ -213,6 +282,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      localStorage.setItem(sessionMarkerKey, "true");
       setUser(signedInUser);
       setAuthForm({ name: "", email: "", password: "" });
       setAuthErrors({});
@@ -222,7 +292,9 @@ export default function App() {
       }
       await Promise.all([loadComplaints(), loadNotifications()]);
     } catch (submitError) {
-      setError(submitError.message);
+      setError(submitError.status === 401 && submitError.message === "Not authenticated"
+        ? "Your session expired. Please sign in again."
+        : submitError.message);
     } finally {
       setAuthSubmitting(false);
     }
@@ -237,6 +309,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ email: account.email, password: account.password }),
       });
+      localStorage.setItem(sessionMarkerKey, "true");
       setUser(signedInUser);
       setAuthForm({ name: "", email: "", password: "" });
       setAuthErrors({});
@@ -246,7 +319,9 @@ export default function App() {
       }
       await Promise.all([loadComplaints(), loadNotifications()]);
     } catch (loginError) {
-      setError(loginError.message);
+      setError(loginError.status === 401 && loginError.message === "Not authenticated"
+        ? "Your session expired. Please sign in again."
+        : loginError.message);
     } finally {
       setAuthSubmitting(false);
     }
@@ -257,6 +332,10 @@ export default function App() {
     const form = event.currentTarget;
     setError("");
     setNotice("");
+    if (photosProcessing) {
+      setError("Please wait for the selected photo to finish preparing.");
+      return;
+    }
     const nextErrors = {};
     if (!complaintForm.type) nextErrors.type = "Choose an issue category.";
     if (!complaintForm.ward) nextErrors.ward = "Choose your Sylhet City Corporation ward.";
@@ -273,6 +352,8 @@ export default function App() {
     }
 
     setComplaintSubmitting(true);
+    setWakingServer(false);
+    let wakeNoticeTimer;
     try {
       const compressedPhotos = await Promise.all(reportFiles.map(compressImage));
       const body = new FormData();
@@ -283,22 +364,45 @@ export default function App() {
       }
       body.append("locationNotShared", String(locationNotShared));
       compressedPhotos.forEach((photo) => body.append("photos", photo));
+      wakeNoticeTimer = setTimeout(() => {
+        setWakingServer(true);
+        setNotice("Server is waking up, please wait...");
+      }, 3000);
       const created = await request("/api/complaints", {
         method: "POST",
         headers: { "Idempotency-Key": reportKey },
         body,
+        onRetry: () => {
+          setWakingServer(true);
+          setNotice("Server is waking up, please wait...");
+        },
       });
-      setComplaints((current) => [created, ...current]);
+      clearTimeout(wakeNoticeTimer);
+      setWakingServer(false);
+      setComplaints((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setComplaintForm({ type: "", description: "", ward: "", priority: "normal", locationText: "" });
       setLocation(null);
       setLocationNotShared(false);
       setReportFiles([]);
       setReportKey(crypto.randomUUID());
       setComplaintErrors({});
-      setNotice("Your complaint has been submitted.");
+      try {
+        localStorage.removeItem("civicpulse-report-draft");
+      } catch (storageError) {
+        console.error("Could not clear the saved report draft.", storageError);
+      }
+      setNotice(`Report ${created.report_code || created.id} submitted successfully.`);
+      try {
+        await Promise.all([loadComplaints(), loadNotifications()]);
+      } catch (refreshError) {
+        setError(`Report submitted, but the dashboard could not refresh: ${refreshError.message}`);
+      }
     } catch (submitError) {
-      setError(submitError.message);
+      setWakingServer(false);
+      setError(submitError.status === 401 ? "Your session expired. Please sign in again." : submitError.message);
     } finally {
+      clearTimeout(wakeNoticeTimer);
+      setWakingServer(false);
       setComplaintSubmitting(false);
     }
   }
@@ -338,12 +442,15 @@ export default function App() {
       setError("Choose no more than 3 photos.");
       return;
     }
+    setPhotosProcessing(true);
     try {
       const compressed = await Promise.all(selected.map(compressImage));
       setReportFiles((current) => [...current, ...compressed]);
       setError("");
     } catch (photoError) {
       setError(photoError.message);
+    } finally {
+      setPhotosProcessing(false);
     }
   }
 
@@ -368,6 +475,7 @@ export default function App() {
     setLoggingOut(true);
     try {
       await request("/api/auth/logout", { method: "POST" });
+      localStorage.removeItem(sessionMarkerKey);
       setUser(null);
       setComplaints([]);
       setNotifications([]);
@@ -376,7 +484,7 @@ export default function App() {
       setAuthErrors({});
       setNotice("");
     } catch (logoutError) {
-      setError(logoutError.message);
+      setError(logoutError.status === 401 ? "Your session expired. Please sign in again." : logoutError.message);
     } finally {
       setLoggingOut(false);
     }
@@ -617,7 +725,7 @@ export default function App() {
               <span className="heading-icon" aria-hidden="true">＋</span>
             </div>
             <p className="panel-description">Tell us what needs attention in your neighborhood.</p>
-            <form className="form-stack" onSubmit={handleComplaintSubmit} noValidate aria-busy={complaintSubmitting}>
+            <form className="form-stack" onSubmit={handleComplaintSubmit} noValidate aria-busy={complaintSubmitting || photosProcessing}>
               <label>
                 <span className="field-label">Issue category <span className="required-mark">Required</span></span>
                 <select
@@ -671,11 +779,29 @@ export default function App() {
                   <button className="button button-quiet" type="button" onClick={useCurrentLocation}>Use my current location</button>
                   {location && <button className="button button-quiet" type="button" onClick={() => setLocation(null)}>Clear pin</button>}
                 </div>
-                <LocationMap location={location} onChange={(nextLocation) => { setLocation(nextLocation); setLocationNotShared(false); }} interactive height={240} />
+                <div
+                  className={`location-map-frame ${complaintErrors.location ? "location-map-invalid" : ""}`}
+                  role="group"
+                  aria-label="Issue map location"
+                  aria-invalid={Boolean(complaintErrors.location)}
+                  aria-describedby={complaintErrors.location ? "complaint-location-error" : undefined}
+                  tabIndex={complaintErrors.location ? -1 : undefined}
+                >
+                  <LocationMap location={location} onChange={(nextLocation) => {
+                    setLocation(nextLocation);
+                    setLocationNotShared(false);
+                    setComplaintErrors((current) => ({ ...current, location: "" }));
+                  }} interactive height={240} />
+                </div>
                 {location && <span className="field-hint">Pinned at {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}. {isWithinSccBounds(location.latitude, location.longitude) ? "Within the approximate SCC map area." : "This pin is outside the approximate SCC area. Please check it before submitting."}</span>}
-                {complaintErrors.location && <span className="field-error" role="alert">{complaintErrors.location}</span>}
+                {complaintErrors.location && <span className="field-error" id="complaint-location-error" role="alert">{complaintErrors.location}</span>}
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={locationNotShared} onChange={(event) => { setLocationNotShared(event.target.checked); if (event.target.checked) setLocation(null); setComplaintErrors((current) => ({ ...current, location: "" })); }} />
+                  <input type="checkbox" aria-invalid={Boolean(complaintErrors.location)} checked={locationNotShared} onChange={(event) => {
+                    const checked = event.target.checked;
+                    setLocationNotShared(checked);
+                    if (checked) setLocation(null);
+                    if (checked || location) setComplaintErrors((current) => ({ ...current, location: "" }));
+                  }} />
                   <span>I prefer not to share a map location; I will describe the area instead.</span>
                 </label>
                 <label>
@@ -685,9 +811,10 @@ export default function App() {
               </div>
               <label>
                 <span className="field-label">Photos (up to 3)</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { choosePhotos(event.target.files); event.target.value = ""; }} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photosProcessing || complaintSubmitting} onChange={(event) => { choosePhotos(event.target.files); event.target.value = ""; }} />
                 <span className="field-hint">JPG, PNG, or WebP. Photos are compressed and metadata is removed before storage.</span>
               </label>
+              {photosProcessing && <p className="field-hint" role="status">Preparing selected photo...</p>}
               {photoPreviews.length > 0 && <div className="photo-preview-list">{photoPreviews.map((preview, index) => <div className="photo-preview" key={preview}><img src={preview} alt={`Selected report photo ${index + 1}`} /><button type="button" onClick={() => setReportFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>Remove</button></div>)}</div>}
               <label>
                 <span className="field-label">Describe the issue <span className="required-mark">Required</span></span>
@@ -710,8 +837,15 @@ export default function App() {
                   ? <span className="field-error" id="complaint-description-error" role="alert">{complaintErrors.description}</span>
                   : <span className="field-hint" id="complaint-description-hint">Include a location and a few details (at least 8 characters).</span>}
               </label>
-              <button className="button button-primary button-full" disabled={complaintSubmitting} aria-busy={complaintSubmitting}>
-                {complaintSubmitting ? "Submitting..." : "Submit report"} {!complaintSubmitting && <span aria-hidden="true">→</span>}
+              {Object.values(complaintErrors).some(Boolean) && (
+                <div className="field-error-summary" role="alert" tabIndex="-1">
+                  <strong>Please fix these items before submitting:</strong>
+                  <ul>{Object.values(complaintErrors).filter(Boolean).map((message) => <li key={message}>{message}</li>)}</ul>
+                </div>
+              )}
+              {wakingServer && <p className="server-waking-message" role="status">Server is waking up, please wait...</p>}
+              <button className="button button-primary button-full" type="submit" disabled={complaintSubmitting || photosProcessing} aria-busy={complaintSubmitting || photosProcessing}>
+                {photosProcessing ? "Preparing photo..." : complaintSubmitting ? "Submitting..." : "Submit report"} {!complaintSubmitting && !photosProcessing && <span aria-hidden="true">→</span>}
               </button>
               <p className="form-footnote">Your reports and photos are visible only to you and authorized SCC staff.</p>
               <p className="field-hint">Your text and selected pin are saved as a draft on this device. Selected photos are not saved in offline drafts.</p>

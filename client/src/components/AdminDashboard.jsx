@@ -18,7 +18,10 @@ async function adminRequest(path, options = {}) {
       body = { message: text.slice(0, 200) };
     }
   }
-  if (!response.ok) throw new Error(body.message || `Request failed (${response.status}).`);
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("civicpulse:auth-expired"));
+    throw new Error(body.message || `Request failed (${response.status}).`);
+  }
   return body;
 }
 

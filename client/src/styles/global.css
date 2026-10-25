@@ -133,6 +133,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .form-stack [aria-invalid="true"] { border-color: var(--color-error); }
 .form-stack [aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgb(166 40 40 / 16%); }
 .field-error { color: var(--color-error); font-size: 13px; font-weight: 500; line-height: 1.45; }
+.field-error-summary { margin: 0; padding: 11px 13px; border: 1px solid #e7b8b4; border-radius: var(--radius-control); color: var(--color-error); background: var(--color-error-soft); font-size: 14px; font-weight: 600; line-height: 1.45; }
+.field-error-summary ul { margin: 7px 0 0; padding-left: 20px; font-weight: 400; }
+.field-error-summary:focus { outline: 3px solid rgb(166 40 40 / 22%); outline-offset: 2px; }
+.location-map-frame { overflow: hidden; border: 2px solid transparent; border-radius: 11px; }
+.location-map-invalid { border-color: var(--color-error); box-shadow: 0 0 0 3px rgb(166 40 40 / 12%); }
+.server-waking-message { margin: 0; color: var(--color-warning); font-size: 14px; font-weight: 600; }
 .field-hint { color: var(--color-secondary); font-size: 13px; font-weight: 400; line-height: 1.5; }
 .button {
   display: inline-flex;
